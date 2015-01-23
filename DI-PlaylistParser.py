@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 
-import urllib2
+from urllib.request import urlopen
 import json
 import sys
 import argparse
-import ConfigParser
+from configparser import SafeConfigParser
 import io
 
 # Mapping of premium URLs
@@ -55,10 +55,10 @@ def process_pls(channel, key):
     url = channel['playlist']
     if key:
         url += '?%s' % key
-    pls_raw = urllib2.urlopen(url).read()
-    pls_config = ConfigParser.SafeConfigParser()
+    pls_raw = urlopen(url).read().decode()
+    pls_config = SafeConfigParser()
     pls_config.optionxform = str
-    pls_config.readfp(io.BytesIO(pls_raw))
+    pls_config.readfp(io.StringIO(pls_raw))
     return pls_config
 
 
@@ -74,7 +74,7 @@ def main():
                         type=int, help='Bitrate in kbps.  Default: highest "\
                         "possible given codec and free / premium constraints.')
     parser.add_argument('-k', '--key', help='Your premium Listen Key.')
-    parser.add_argument('-f', '--format', choices=['pls', 'exaile', 'itunes'],
+    parser.add_argument('-f', '--format', choices=['pls', 'exaile', 'itunes', 'full'],
                         default='pls',
                         help='Playlist file format.  Default: "pls"')
     parser.add_argument('-l', '--long', action='store_true',
@@ -99,7 +99,7 @@ def main():
         return 1
 
     print('Retrieving JSON playlist info...')
-    channels = json.load(urllib2.urlopen(url))
+    channels = json.loads(urlopen(url).read().decode())
 
     # Default PLS Format
     if args.format == 'pls':
@@ -108,8 +108,41 @@ def main():
             print('%s' % c['name'])
             pls = process_pls(c, args.key)
             filename = '%s.pls' % (get_title(pls) if args.long else c['key'])
-            with open(filename, 'wb') as f:
+            with open(filename, 'w') as f:
                 pls.write(f)
+
+    # Format for the exaile media player
+    elif args.format == 'full':
+        get_title = lambda pls: pls.get('playlist', 'Title1')
+        pls = SafeConfigParser()
+        pls.optionxform = str
+        pls.add_section('playlist')
+        filename = 'full.pls'
+        buffer_pls = ''
+        buffer_list = []
+        i = 1
+        for c in channels:
+            print('%s' % c['name'])
+            buffer_pls = process_pls(c, args.key)
+            j = 0
+            for key, value in buffer_pls.items('playlist'):
+                if key.startswith('File'):
+                    buffer_list.append(('File' + str(i), value))
+                elif key.startswith('Title'):
+                    buffer_list.append(('Title' + str(i), value))
+                if key.startswith('File'):
+                    buffer_list.append(('Length' + str(i), value))
+                j += 1
+                if j == 3:
+                    j = 0
+                    i += 1
+
+        pls.set('playlist', 'NumberOfEntries', str(int(len(buffer_list) / 3)))
+        for key, value in buffer_list:
+            pls.set('playlist', key, value)
+        pls.set('playlist', 'Version', '2')
+        with open(filename, 'w') as f:
+            pls.write(f)
 
     # Format for the exaile media player
     elif args.format == 'exaile':
