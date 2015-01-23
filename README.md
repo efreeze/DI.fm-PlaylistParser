@@ -1,4 +1,6 @@
-#DI.fm-PlaylistParser
+#DI.fm-PlaylistParser (Py3)
+Python 3.x version
+
 ```
 usage: DI-PlaylistParser.py [-h] [-s {di,sky}] [-c {mp3,aac}]
                             [-q {40,64,128,96,256}] [-k KEY] [-f {pls,exaile}]
